@@ -7,9 +7,11 @@
 ```text
 Jupyter Notebook (Python)
  ├─ LlamaIndex → แบ่ง Markdown ตามหัวข้อ
+ ├─ Ollama
+ │   └─ bge-m3 → Embedding ของเอกสารและคำถาม
+ ├─ Transformers → tokenizer ของ BGE-M3 สำหรับแบ่ง chunks
  ├─ Sentence Transformers
- │   ├─ BGE-M3 → Embedding
- │   └─ BGE reranker → จัดอันดับใหม่เฉพาะ Improved
+ │   └─ BGE reranker → CrossEncoder เฉพาะ Improved
  ├─ ChromaDB → ค้นหาเวกเตอร์ด้วย cosine
  ├─ SQLite FTS5 → ค้นหา BM25
  │   └─ PyThaiNLP newmm → แบ่งคำไทยเฉพาะ Improved
@@ -22,8 +24,9 @@ Jupyter Notebook (Python)
 |---|---|---|
 | Python + JupyterLab | เปิด Notebook และรันตามลำดับเซลล์ | ในเครื่อง |
 | LlamaIndex (`llama-index-core`) | ใช้ `MarkdownNodeParser` แบ่งข้อความตามหัวข้อ | ในเครื่อง |
-| Sentence Transformers + Transformers + PyTorch | โหลดและรันโมเดล embedding และ reranker | ในเครื่อง; ดาวน์โหลดโมเดลจาก Hugging Face ครั้งแรก |
-| `BAAI/bge-m3` | แปลงข้อความและคำถามเป็นเวกเตอร์ ใช้ทั้งสองระบบ | ในเครื่อง |
+| Ollama `bge-m3` | แปลงข้อความและคำถามเป็นเวกเตอร์ผ่าน `/api/embed` ใช้ทั้งสองระบบ | Ollama ในเครื่องที่ `http://localhost:11434` |
+| Transformers | โหลดเฉพาะ tokenizer ของ `BAAI/bge-m3` เพื่อนับ tokens และแบ่ง chunks | Python ในเครื่อง; ดาวน์โหลด tokenizer ครั้งแรก |
+| Sentence Transformers + PyTorch | รัน BGE reranker ผ่าน CrossEncoder เฉพาะ Improved | Python ในเครื่อง; ดาวน์โหลดน้ำหนัก reranker ครั้งแรก |
 | `BAAI/bge-reranker-v2-m3` | ให้คะแนนคู่คำถาม–chunk เฉพาะ Improved ผ่าน `CrossEncoder` | ในเครื่อง |
 | ChromaDB | เก็บเวกเตอร์ด้วย `PersistentClient` และค้นหาด้วย cosine | ในเครื่อง: `output/chroma/` |
 | SQLite FTS5 (`sqlite3` ของ Python) | สร้างดัชนีข้อความและค้นหาด้วย BM25 | ในหน่วยความจำ; สร้างใหม่เมื่อ Run All |
@@ -32,11 +35,11 @@ Jupyter Notebook (Python)
 | OpenRouter + Qwen | ใช้ `qwen/qwen-2.5-72b-instruct` เป็นค่าเริ่มต้นสำหรับสร้างบริบทและคำตอบ | ผ่าน OpenRouter API |
 | python-dotenv | โหลด API key และค่าตั้งระบบจาก `.env` โดย environment ที่ตั้งไว้มีลำดับความสำคัญกว่า | ในเครื่อง |
 
-เวอร์ชัน dependencies ระบุใน [requirements.txt](requirements.txt) โมเดล embedding และ reranker ตรึง revision ใน Notebook ส่วนชื่อ Qwen เปลี่ยนได้ด้วย `RAG_LLM_MODEL` และต้องใช้ค่าเดียวกันทั้งสองระบบเมื่อเปรียบเทียบ
+เวอร์ชัน dependencies ระบุใน [requirements.txt](requirements.txt) tokenizer และ reranker ตรึง revision ใน Notebook ส่วน embedding บันทึกเวอร์ชัน Ollama, model digest และ quantization ในผลแต่ละรัน ส่วนชื่อ Qwen เปลี่ยนได้ด้วย `RAG_LLM_MODEL` และต้องใช้ค่าเดียวกันทั้งสองระบบเมื่อเปรียบเทียบ
 
 ## ระบบทำงานอย่างไร
 
-**เตรียมข้อมูล:** อ่านเอกสาร → แบ่ง chunks → ส่งเอกสารเต็มและ chunk ให้ Qwen สร้างบริบท → ทำ embedding ข้อความ chunk รวมบริบทด้วย BGE-M3 → นำเข้า ChromaDB และ SQLite FTS5
+**เตรียมข้อมูล:** อ่านเอกสาร → แบ่ง chunks → ส่งเอกสารเต็มและ chunk ให้ Qwen สร้างบริบท → ทำ embedding ข้อความ chunk รวมบริบทด้วย Ollama BGE-M3 → นำเข้า ChromaDB และ SQLite FTS5
 
 **ค้นและตอบ:** คำถาม → ค้น Vector และ BM25 → รวมอันดับด้วย RRF → reranking เฉพาะ Improved → เลือกหลักฐาน 5 chunks → ส่งหลักฐานและคำถามให้ Qwen ตอบภาษาไทยพร้อมอ้างอิง `[D1]`, `[D2]`
 
@@ -52,7 +55,7 @@ Jupyter Notebook (Python)
 | Candidates | Vector และ BM25 อย่างละ 10 | Vector และ BM25 อย่างละ 20 |
 | รวมอันดับ | RRF ค่า 60 แล้วเลือก 5 | RRF ค่า 60 แล้วนำ 20 อันดับแรกไป rerank |
 | Reranking | ไม่มี | BGE reranker เลือก 5 อันดับแรก |
-| Embedding | BGE-M3 | BGE-M3 เดียวกัน |
+| Embedding | Ollama `bge-m3` | Ollama `bge-m3` และ digest เดียวกัน |
 | LLM และ prompt | Qwen สำหรับบริบทและคำตอบ | Qwen และ prompt เดียวกัน รวมถึง temperature และงบข้อความ |
 
 Improved คาดว่าจะช่วยให้ chunks มีขนาดเหมาะสม รักษาข้อมูลรอยต่อ ค้นคำไทยได้ดีขึ้น และเลือกหลักฐานที่ตรงคำถามมากขึ้น แต่มีต้นทุนเพิ่มจากจำนวน chunks การสร้างบริบท และ reranking ต้องใช้คะแนนจริงยืนยันว่าดีขึ้นหรือไม่ การทดลองนี้เปลี่ยนหลายส่วนพร้อมกัน จึงอธิบายผลรวมได้ แต่แยกผลของแต่ละส่วนไม่ได้
@@ -61,7 +64,7 @@ Baseline ดัดแปลงส่วนฐานข้อมูลจาก O
 
 ## วิธีรันในเครื่อง
 
-เปิด Terminal ในโฟลเดอร์งานที่มี Notebook และ `requirements.txt` แล้วติดตั้งลง Python ในเครื่อง:
+ถือว่า Ollama และ `bge-m3` พร้อมใช้งานแล้ว เปิด Terminal ในโฟลเดอร์งานที่มี Notebook และ `requirements.txt` แล้วติดตั้งลง Python ในเครื่อง:
 
 ```bash
 python3 -m pip install -r requirements.txt jupyterlab
@@ -91,9 +94,9 @@ python3 -m jupyter lab '2)rag_improved.ipynb'
 | ค่าในเซลล์ตั้งค่า | สิ่งที่เกิดขึ้น |
 |---|---|
 | `RUN_LIVE=False` | ตรวจ corpus และ self-check โดยไม่โหลดน้ำหนักโมเดล ไม่เรียก API และไม่ส่งออกผลทดลอง |
-| `RUN_LIVE=True` | โหลดโมเดล สร้างดัชนี ทดลองคำถาม 18 ข้อ เรียก OpenRouter และส่งออกผลจริง |
+| `RUN_LIVE=True` | โหลด tokenizer และ reranker เฉพาะ Improved เรียก Ollama ทำ embedding สร้างดัชนี ทดลองคำถาม 18 ข้อ เรียก OpenRouter และส่งออกผลจริง |
 
-ปัจจุบันทั้งสองไฟล์ตั้ง `RUN_LIVE=True` หากต้องการตรวจ offline ให้เปลี่ยนเป็น `False` ก่อนรัน การทดลองจริงต้องใช้อินเทอร์เน็ตและ OpenRouter API key โดยมีค่าใช้จ่ายตามการใช้งาน API การโหลดโมเดลและสร้างบริบทครั้งแรกใช้เวลา
+ปัจจุบันทั้งสองไฟล์ตั้ง `RUN_LIVE=True` หากต้องการตรวจ offline ให้เปลี่ยนเป็น `False` ก่อนรัน การทดลองจริงต้องใช้อินเทอร์เน็ตและ OpenRouter API key โดยมีค่าใช้จ่ายตามการใช้งาน API การโหลด tokenizer และ reranker รวมถึงสร้างบริบทครั้งแรกใช้เวลา
 
 หาก key ว่าง Notebook จะหยุดและแจ้งให้เติม `.env` หลังแก้ key ให้ Restart Kernel แล้ว Run All ไฟล์ `.env` อยู่ใน `.gitignore` และ key ไม่ถูกพิมพ์หรือส่งออกพร้อมผลทดลอง
 
@@ -108,7 +111,7 @@ Notebook แสดงคะแนน คำตอบ และหลักฐา
 | `summary.csv` | คะแนนเฉลี่ยและเวลาเฉลี่ยสำหรับเทียบสองระบบ |
 | `answer_review.csv` | คำตอบกับเฉลย 18 แถว พร้อมช่องว่างให้ตรวจความถูกต้อง ความครบถ้วน และข้อความที่ไม่มีหลักฐานรองรับ |
 
-ใช้ `summary.csv` จากการรันของทั้งสองระบบที่มีค่าโมเดลและ prompt ตรงกัน เติมผลที่วัดได้ใน [rag_comparison.csv](rag_comparison.csv) สำหรับข้อ (3):
+ใช้ `summary.csv` จากการรันของทั้งสองระบบที่มี Ollama embedding digest, tokenizer revision, ค่าโมเดลและ prompt ตรงกัน เติมผลที่วัดได้ใน [rag_comparison.csv](rag_comparison.csv) สำหรับข้อ (3) ต้องรันทั้งสองระบบใหม่หลังเปลี่ยน embedding backend และแยกผลเก่าที่ใช้ SentenceTransformer ออกจากการเปรียบเทียบนี้:
 
 - `hit_at_5`: สัดส่วนคำถามที่พบหลักฐานใน 5 อันดับแรก
 - `mrr_at_5`: คะแนนตามอันดับของหลักฐานแรก ยิ่งพบเร็วคะแนนยิ่งสูง
@@ -123,3 +126,5 @@ Notebook แสดงคะแนน คำตอบ และหลักฐา
 - สไลด์หน้า 25: [โค้ดค้นและตอบ](https://github.com/aekanun2020/2025-authenticRAG/blob/4567d3d5d377f6e38ac18afd62133476425f98bf/onlysearchAuthenticRAG.py)
 
 รายละเอียดการดัดแปลง แหล่งอ้างอิง และ self-check อยู่ใน Notebook ของแต่ละระบบ
+
+Embedding ใช้ [Ollama `/api/embed`](https://docs.ollama.com/api/embed) พร้อม `truncate=False` ส่วน reranker คง CrossEncoder เพราะ [Ollama 0.35.0](https://github.com/ollama/ollama/blob/v0.35.0/server/routes.go) ไม่มี API ให้คะแนน rerank คู่คำถาม–ข้อความ
