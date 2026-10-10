@@ -1,0 +1,2 @@
+﻿stage,answerable_questions,all_questions,hit_at_5,mrr_at_5,evidence_recall_at_5,mean_retrieval_ms,mean_rerank_ms,mean_search_total_ms
+baseline,15,18,1.0,0.8777777777777778,1.0,214.80834255716115,0.0,214.80834255716115

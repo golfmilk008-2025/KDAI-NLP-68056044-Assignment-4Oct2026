@@ -3,5 +3,4 @@ transformers>=4.41,<5
 llama-index-core==0.14.25
 chromadb==1.5.9
 pythainlp==5.1.0
-openai==2.54.0
 python-dotenv==1.2.4
